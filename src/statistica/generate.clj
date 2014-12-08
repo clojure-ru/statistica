@@ -33,6 +33,7 @@
 (def stats-graph {
    :name   (pc/fnk [full_name]  (last (string/split full_name #"/")))
    :url    (pc/fnk [full_name]  (str github-http-prefix full_name))
+   :dats  (pc/fnk [dates]       (map c/to-string dates))
    :incrs  (pc/fnk [increments] (reduce #(conj %1 (+ %2 (last %1))) [(first increments)] (rest increments)))
    ;;:incrs  (pc/fnk [increments] increments)
    :n      (pc/fnk [increments] (count increments))
@@ -41,8 +42,8 @@
    :moda   (pc/fnk [freq]       (first (sort-by val > freq)))
 ;; :fmoda  (pc/fnk [moda]       (sort-by val > (frequencies moda)))
    :w      my-weight
-   :w2     my-weight2
-   :w3     my-weight3
+  ;; :w2     my-weight2
+  ;; :w3     my-weight3
 
 ;;    :min   (pc/fnk [increments]            (reduce min increments))
 ;;    :max   (pc/fnk [increments]            (reduce max increments))
