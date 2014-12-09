@@ -5,9 +5,8 @@
             [plumbing.core :as pc]
             [clojure.pprint :refer [print-table]]
             [cheshire.core :refer [generate-string]]
-            [plumbing.graph :as graph]
-            [statistica.banned :refer [get-banlist]]
-            [clojure.string :as string]))
+            [statistica.calculation :refer [stats]]
+            [statistica.banned :refer [get-banlist]]))
 
 ;; HELPERS
 
@@ -20,70 +19,6 @@
   (map from-sql-to-utc (seq (.getArray dates))))
 
 (def limit-for-weekly-select 1000)
-(def github-http-prefix "https://github.com/")
-
-;; STATISTIC FUNCTIONS
-
-(defn weight-with-count-days [increments count-of-day]
-  (let [days (range count-of-day 1 -1)] 
-    (float (apply + (map #(/ (* %1 count-of-day) %2) increments days)))))
-
-(pc/defnk increasing-increments [increments]
-  (reduce #(conj %1 (+ %2 (last %1))) [(first increments)] (rest increments)))
-
-(pc/defnk diff-increments [increments]
-  (map #(- %1 %2) (rest increments) increments))
-
-(pc/defnk diff-weight [diff]
-  (weight-with-count-days diff (count diff))) 
-
-(pc/defnk my-weight [increments n]
-  "increment/count-of-days"
-  (weight-with-count-days increments n)) 
- 
-(pc/defnk my-weight2 [increments sum n]
-  (apply + (map #(/ (Math/sqrt (/ (* %1 n) sum)) %2) increments (range n 1 -1)))) 
-
-(pc/defnk my-weight3 [increments sum n]
-  (float (apply + (map #(/ (* %1 n) sum %2) increments (range n 1 -1))))) 
-
-(def stats-graph {
-   :name   (pc/fnk [full_name]  (last (string/split full_name #"/")))
-   :url    (pc/fnk [full_name]  (str github-http-prefix full_name))
-   ;;:dats   (pc/fnk [dates]       (map c/to-string dates))
-   :n      (pc/fnk [increments] (count increments))
-   :incrs  increasing-increments
-   :incs   (pc/fnk [increments] increments)
-   :diff   diff-increments
-   :w      my-weight
-   :diffw  diff-weight
-   :cplx   (pc/fnk [w diffw] (+ w (* diffw 2)))
-   :sum    (pc/fnk [increments] (apply + increments))
-;;   :freq   (pc/fnk [increments] (frequencies increments))
-;;   :moda   (pc/fnk [freq]       (first (sort-by val > freq)))
-;;   :freq-moda  (pc/fnk [moda]       (sort-by val > (frequencies moda)))
-  ;; :w2     my-weight2
-  ;; :w3     my-weight3
-
-;;    :min   (pc/fnk [increments]            (reduce min increments))
-;;    :max   (pc/fnk [increments]            (reduce max increments))
-;; PROBABILITY
-;;   :incs  (pc/fnk [increments]            (map inc increments))
-;;   :probs (pc/fnk [incs n]                (map #(/ (val %) n) (frequencies incs)))
-;;    :m     (pc/fnk [increments probs]      (sum2 identity increments probs))
-;;    :m2    (pc/fnk [increments probs m]    (- (sum2 #(* % %) increments probs) (* m m)))
-;;    :m3    (pc/fnk [increments probs m2 m] (+ (* 2 m m m)
-;;                                              (- (sum2 #(* % % %) increments probs)
-;;                                                 (* 3 m2 m))))
-   })
-
-(def stats (graph/eager-compile stats-graph))
-
-;; FILTERS
-
-(defn banlist-filter [repos]
-  (let [ban (get-banlist)]
-    (filter (fn [repo] (not (some #(= % (:full_name repo)) ban))) repos)))
 
 ;; FILTER-FNS
 
@@ -98,6 +33,12 @@
 (defn composite-filter [global repo-stat]
   (and (length-filter global repo-stat)
        (last-increment-filter global repo-stat)))
+
+;; DB FUNC's
+
+(defn banlist-filter [repos]
+  (let [ban (get-banlist)]
+    (filter (fn [repo] (not (some #(= % (:full_name repo)) ban))) repos)))
 
 (defn prepare-data [repos]
  (let [dates (prepare-jdbc-array-dates (:dates repos))
@@ -129,6 +70,7 @@
 (defn generate-json-stat [statistica]
   (generate-string (map keys-for-json statistica)))
 
+;; #TODO move to test.core
 ;; TEST PRINT
 
 (def keys-for-print #(select-keys % [:sum :incrs :moda :w3 :w2 :w :name]))
