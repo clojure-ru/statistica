@@ -1,17 +1,18 @@
 (ns statistica.core
   (:require [statistica.generate :refer :all]
             [compojure.core :refer :all]
+            [ring.util.response :refer :all]
             [clj-time.coerce :as c]
             [ring.middleware.defaults :refer [wrap-defaults site-defaults]]
-            [compojure.route :as route]))
+            [compojure.route :as route]
+            [clojure.java.io :as io]))
 
 (defn parse-date [date]
   (c/from-string date))
 
 (defn good-response [body]
-  {:status 200
-   :headers {"Content-Type" "application/javascript; charset=utf-8"}
-   :body body})
+  (-> (response body)
+      (content-type "application/javascript")))
 
 (def bad-request {:status 403
                   :headers {"Content-Type" "text/plain; charset=utf-8"}
@@ -26,6 +27,14 @@
         (and from# (not to#)) (good-response (generate-json-stat (take 10 (classification :w from#))))
         (and from# to#) (good-response (generate-json-stat (take 10 (classification :w from# to#))))
         :else bad-request)))
+  (GET "/test/:method" [method] 
+    (cond
+      (= method "html") {:status 200 
+                         :headers {"Content-Type" "text/html; charset=utf-8"}
+                         :body (io/file "resources/public/index.html")}
+      :else bad-request))
+  (GET "/resources/index.html" [] bad-request)
+  (route/files "/js/")
   (route/not-found {:status 404
                     :headers {"Content-Type" "text/plain; charset=utf-8"}
                     :body "Page not found."}))
