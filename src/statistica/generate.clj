@@ -24,12 +24,22 @@
 
 ;; STATISTIC FUNCTIONS
 
+(defn weight-with-count-days [increments count-of-day]
+  (let [days (range count-of-day 1 -1)] 
+    (float (apply + (map #(/ (* %1 count-of-day) %2) increments days)))))
+
 (pc/defnk increasing-increments [increments]
   (reduce #(conj %1 (+ %2 (last %1))) [(first increments)] (rest increments)))
 
+(pc/defnk diff-increments [increments]
+  (map #(- %1 %2) (rest increments) increments))
+
+(pc/defnk diff-weight [diff]
+  (weight-with-count-days diff (count diff))) 
+
 (pc/defnk my-weight [increments n]
   "increment/count-of-days"
-  (float (apply + (map #(/ (* %1 n) %2) increments (range n 1 -1))))) 
+  (weight-with-count-days increments n)) 
  
 (pc/defnk my-weight2 [increments sum n]
   (apply + (map #(/ (Math/sqrt (/ (* %1 n) sum)) %2) increments (range n 1 -1)))) 
@@ -41,21 +51,24 @@
    :name   (pc/fnk [full_name]  (last (string/split full_name #"/")))
    :url    (pc/fnk [full_name]  (str github-http-prefix full_name))
    ;;:dats   (pc/fnk [dates]       (map c/to-string dates))
-   :incrs  increasing-increments
-   ;;:incrs  (pc/fnk [increments] increments)
    :n      (pc/fnk [increments] (count increments))
-   :sum    (pc/fnk [increments] (apply + increments))
-   :freq   (pc/fnk [increments] (frequencies increments))
-   :moda   (pc/fnk [freq]       (first (sort-by val > freq)))
-;; :fmoda  (pc/fnk [moda]       (sort-by val > (frequencies moda)))
+   :incrs  increasing-increments
+   :incs   (pc/fnk [increments] increments)
+   :diff   diff-increments
    :w      my-weight
+   :diffw  diff-weight
+   :cplx   (pc/fnk [w diffw] (+ w (* diffw 2)))
+   :sum    (pc/fnk [increments] (apply + increments))
+;;   :freq   (pc/fnk [increments] (frequencies increments))
+;;   :moda   (pc/fnk [freq]       (first (sort-by val > freq)))
+;;   :freq-moda  (pc/fnk [moda]       (sort-by val > (frequencies moda)))
   ;; :w2     my-weight2
   ;; :w3     my-weight3
 
 ;;    :min   (pc/fnk [increments]            (reduce min increments))
 ;;    :max   (pc/fnk [increments]            (reduce max increments))
 ;; PROBABILITY
-   :incs  (pc/fnk [increments]            (map inc increments))
+;;   :incs  (pc/fnk [increments]            (map inc increments))
 ;;   :probs (pc/fnk [incs n]                (map #(/ (val %) n) (frequencies incs)))
 ;;    :m     (pc/fnk [increments probs]      (sum2 identity increments probs))
 ;;    :m2    (pc/fnk [increments probs m]    (- (sum2 #(* % %) increments probs) (* m m)))
@@ -65,7 +78,6 @@
    })
 
 (def stats (graph/eager-compile stats-graph))
-
 
 ;; FILTERS
 
@@ -77,6 +89,15 @@
 
 (defn length-filter [{size :max-size-of-incrs} repo-stat]
   (= (count (:incrs repo-stat)) size))
+
+(defn last-increment-filter [_ repo-stat]
+  (let [incrs (:incs repo-stat)
+        n (count incrs)]
+    (> (apply + (drop (- n 3) incrs)) 0)))
+
+(defn composite-filter [global repo-stat]
+  (and (length-filter global repo-stat)
+       (last-increment-filter global repo-stat)))
 
 (defn prepare-data [repos]
  (let [dates (prepare-jdbc-array-dates (:dates repos))
@@ -103,7 +124,7 @@
 
 ;; JSON GENERATE
 
-(def keys-for-json #(select-keys % [:name :incrs :url]))
+(def keys-for-json #(select-keys % [:name :incrs :url :diffw :w :cplx :sum]))
 
 (defn generate-json-stat [statistica]
   (generate-string (map keys-for-json statistica)))
@@ -161,4 +182,4 @@
     (classification sort-key from (t/today)))
   ([sort-key from to]
     (let [statistica (best-increments from to)]
-      (generate-and-sort statistica sort-key length-filter))))
+      (generate-and-sort statistica sort-key composite-filter))))
