@@ -6,6 +6,7 @@
             [clojure.pprint :refer [print-table]]
             [cheshire.core :refer [generate-string]]
             [plumbing.graph :as graph]
+            [statistica.banned :refer [get-banlist]]
             [clojure.string :as string]))
 
 ;; HELPERS
@@ -21,7 +22,13 @@
 (def limit-for-weekly-select 1000)
 (def github-http-prefix "https://github.com/")
 
+;; STATISTIC FUNCTIONS
+
+(pc/defnk increasing-increments [increments]
+  (reduce #(conj %1 (+ %2 (last %1))) [(first increments)] (rest increments)))
+
 (pc/defnk my-weight [increments n]
+  "increment/count-of-days"
   (float (apply + (map #(/ (* %1 n) %2) increments (range n 1 -1))))) 
  
 (pc/defnk my-weight2 [increments sum n]
@@ -33,8 +40,8 @@
 (def stats-graph {
    :name   (pc/fnk [full_name]  (last (string/split full_name #"/")))
    :url    (pc/fnk [full_name]  (str github-http-prefix full_name))
-   :dats  (pc/fnk [dates]       (map c/to-string dates))
-   :incrs  (pc/fnk [increments] (reduce #(conj %1 (+ %2 (last %1))) [(first increments)] (rest increments)))
+   ;;:dats   (pc/fnk [dates]       (map c/to-string dates))
+   :incrs  increasing-increments
    ;;:incrs  (pc/fnk [increments] increments)
    :n      (pc/fnk [increments] (count increments))
    :sum    (pc/fnk [increments] (apply + increments))
@@ -60,24 +67,32 @@
 (def stats (graph/eager-compile stats-graph))
 
 
+;; FILTERS
+
+(defn banlist-filter [repos]
+  (let [ban (get-banlist)]
+    (filter (fn [repo] (not (some #(= % (:full_name repo)) ban))) repos)))
+
+;; FILTER-FNS
+
+(defn length-filter [{size :max-size-of-incrs} repo-stat]
+  (= (count (:incrs repo-stat)) size))
+
 (defn prepare-data [repos]
  (let [dates (prepare-jdbc-array-dates (:dates repos))
        counts (seq (.getArray (:increments repos)))]
   (assoc repos :dates dates :increments counts)))
 
 (defn make-statistics [from to]
-  (map prepare-data (get-best-repositories from to limit-for-weekly-select)))
+  (->> (get-best-repositories from to limit-for-weekly-select)
+       banlist-filter
+       (map prepare-data)))
 
 (defn get-min-freq [x]
   (get (:freq x) (:min x)))
 
-(defn gigants [statics]
-  (->>  (group-by :min statics)
-        (map #(hash-map (key %) (group-by get-min-freq (val %))))
-        (into (sorted-map))))
-
 (defn calculate-globals [statistica]
- (let [init-stat {:max-size-of-incrs -10000}]
+ (let [init-stat {:max-size-of-incrs 0}]
   (reduce (fn [res repo-stat]
            (assoc res :max-size-of-incrs (max (count (:incrs repo-stat)) (:max-size-of-incrs res))))
    init-stat statistica)))   
@@ -85,10 +100,6 @@
 (defn generate-and-sort [statistica sort-key filter-fn]
   (let [globals (calculate-globals statistica)]
    (sort-by sort-key > (filter #(filter-fn globals %) statistica))))
-
-(defn length-filter [{size :max-size-of-incrs} repo-stat]
-  (when (= (count (:incrs repo-stat)) size)
-    repo-stat))
 
 ;; JSON GENERATE
 
@@ -133,13 +144,15 @@
   ;;(print-fmt )
   (print-table (map keys-for-print (take 100 (sort-by #(-> % :sum) > (moda-filter x xs))))))
 
-;; END TEST PRINT
+;; CALCULUS
 
-(defn best-increments []
-  (map stats (filter #(= (:counter_id %) 4) (make-statistics))))
-;;    (doall (map sort-and-print-frequencies (gigants ws)))
-;;    (sort-and-print-probs (filter #(> 50 (:sum %)) ws))
-    ;;(sort-by-moda ws)
+(defn gigants [statics]
+  (->>  (group-by :min statics)
+        (map #(hash-map (key %) (group-by get-min-freq (val %))))
+        (into (sorted-map))))
+
+(defn best-increments [from to]
+  (map stats (filter #(= (:counter_id %) 4) (make-statistics from to))))
 
 (defn classification 
   ([sort-key]
@@ -147,5 +160,5 @@
   ([sort-key from] 
     (classification sort-key from (t/today)))
   ([sort-key from to]
-    (let [statistica (map stats (make-statistics from to))]
+    (let [statistica (best-increments from to)]
       (generate-and-sort statistica sort-key length-filter))))

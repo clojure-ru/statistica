@@ -13,5 +13,6 @@
                  [clj-time "0.8.0"]
                  [cheshire "5.3.1"]
                  [korma "0.4.0"]
+                 [watchtower "0.1.1"]
                  [ring/ring-defaults "0.1.2"]]
   :ring {:handler statistica.core/app})
