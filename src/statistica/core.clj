@@ -2,10 +2,12 @@
   (:require [statistica.generate :refer :all]
             [compojure.core :refer :all]
             [ring.util.response :refer :all]
+            [ring.adapter.jetty :as jetty]
             [clj-time.coerce :as c]
             [environ.core :refer [env]]
             [ring.middleware.defaults :refer [wrap-defaults site-defaults]]
             [compojure.route :as route]
+            [statistica.banned :refer [start-watcher]]
             [clojure.java.io :as io])
   (:gen-class))
 
@@ -41,7 +43,10 @@
                     :headers {"Content-Type" "text/plain; charset=utf-8"}
                     :body "Page not found."}))
 
-;; (def app (wrap-defaults statistica-api site-defaults))
+(def app (wrap-defaults statistica-api site-defaults))
 
-(defn -main [& args]
-  (wrap-defaults statistica-api site-defaults))
+(defn -main [& args] 
+  (start-watcher)
+  (jetty/run-jetty app {:port (if (:port env) 
+                               (Integer/parseInt (:port env))
+                               8123)}))
