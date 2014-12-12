@@ -15,4 +15,9 @@
                  [korma "0.4.0"]
                  [watchtower "0.1.1"]
                  [ring/ring-defaults "0.1.2"]]
-  :ring {:handler statistica.core/app})
+  :ring {:handler statistica.core/app
+         :port 8123}
+
+  :main statistica.core
+  :env {:port 8123}
+)
