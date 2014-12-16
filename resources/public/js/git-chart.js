@@ -1,7 +1,7 @@
-var ctx = document.getElementById("image").getContext("2d");
-var gitChart = null;
-
-var lineColors = ["#C8001A", "#2F3871", "#FF5022", "#FFAF00", "#5083F1", "#002157", "#0076A3", "#BD8CBF", "#603913", "#C69C6D"]
+var canvasID = "libraries-stat",
+	gitChart = null,
+	lineColors = ["#C8001A", "#2F3871", "#FF5022", "#FFAF00", "#5083F1", "#002157", "#0076A3", "#BD8CBF", "#603913", "#C69C6D"],
+	columnNames = ['&nbsp;&nbsp;', 'Имя репозитория', 'Активность', 'Коммитов за неделю'];
 
 function makeChart(repositories){
 	'use strict'
@@ -24,23 +24,70 @@ function makeChart(repositories){
 		data.push(line);
 	});
 
-	var legendStr = "<ul class=\"line-legend\">";
-	
-	for (var i=0; i<data.length; i++){
-		legendStr += "<li><span style=\"background-color:" + data[i].strokeColor + "\">&nbsp;&nbsp;&nbsp;</span>&nbsp;&nbsp;";
-		legendStr += "<a href=\"" + data[i].url + "\">" + data[i].label + "</a>";
-		legendStr += "<div class=\"weights\">" + Math.round(repositories[i].cplx) + "</div>";
-		legendStr += "<div class=\"weights\">" + Math.round(repositories[i].diffw) + "</div>";
-		legendStr += "<div class=\"weights\">" + Math.round(repositories[i].w) + "</div>";
-		legendStr += "<div class=\"weights\">" + Math.round(repositories[i].sum) + "</div>";
-		legendStr += "</li>";
-	}
-	legendStr += "</ul>";
+	var GitLegend = function(colNames, data){
+		var self = {};
+		self.colNames = colNames;
+		self.data = data;
 
-	document.getElementById("image").parentNode.innerHTML += legendStr;
+		self.build = function(){
+			var out = document.createElement("table"),
+				currentRow = null,
+				addRow = function(){
+					currentRow = document.createElement("tr");
+					out.appendChild(currentRow);
+				},
+				wrap = function(name, node){
+					var newNode = document.createElement(name);
+					newNode.appendChild(node);
+					return newNode;
+				};
+
+			out.classList.add("line-legend");
+
+			addRow();
+
+			self.colNames.forEach(function (val){
+				var th = document.createElement('th');
+				th.innerHTML = val;
+				currentRow.appendChild(th);
+			});
+
+			self.data.forEach(function(val, idx){
+				addRow();
+				var color = document.createElement('div'),
+					name = document.createElement('td'),
+					weight = document.createElement('td'),
+					increment = document.createElement('td');
+
+				color.style = "background-color:" + val.strokeColor;
+				name.innerHTML = '<a href="' + val.url + '">' + val.label + '</a>';
+				weight.innerHTML = Math.round(repositories[idx].w);
+				increment.innerHTML = Math.round(repositories[idx].sum);
+
+				color.classList.add('lineColor');
+				weight.classList.add('number');
+				increment.classList.add('number');
+
+				currentRow.appendChild(wrap('td', color));
+				currentRow.appendChild(name);
+				currentRow.appendChild(weight);
+				currentRow.appendChild(increment);
+			});
+
+			return out;
+		}
+
+		self.buildHTML = function() { return self.build().outerHTML; }
+
+		return self;
+	}
+
+	document.getElementById(canvasID).parentNode.appendChild(
+		GitLegend(columnNames,data).build()
+	);
 
 	var steps = Math.ceil(maxIncrement/20),
-		gitChart1 = new Chart(document.getElementById("image").getContext("2d")).Line(
+		gitChart = new Chart(document.getElementById(canvasID).getContext("2d")).Line(
 			// data
 			{
 				labels: ["29.11.14", "30.11.14", "1.12.14", "2.12.14", "3.12.14", "4.12.14", "5.12.14"],
@@ -55,18 +102,19 @@ function makeChart(repositories){
 				multiTooltipTemplate: "<%= datasetLabel %>: <%= value %>"
 			}
 		);
-	console.log(steps);
 }
 
 // LOAD DATA
 
 var xmlhttp = new XMLHttpRequest();
-var url = "/";
+var url = "/?from=2014-11-29&to=2014-12-05";
 
 xmlhttp.onreadystatechange = function() {
     if (xmlhttp.readyState == 4 && xmlhttp.status == 200) {
         var myArr = JSON.parse(xmlhttp.responseText);
         makeChart(myArr);
+        document.querySelector('img[src*="spinner"]').remove();
+        document.getElementById(canvasID).hidden = false;
     }
 }
 

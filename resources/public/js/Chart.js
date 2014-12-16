@@ -2683,7 +2683,7 @@
 				return helpers.findPreviousWhere(collection, hasValue, index) || point;
 			};
 
-			this.scale.draw(easingDecimal);
+			if (typeof(this.scale) != 'undefined') this.scale.draw(easingDecimal);
 
 
 			helpers.each(this.datasets,function(dataset){
