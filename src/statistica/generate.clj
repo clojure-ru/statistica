@@ -2,6 +2,8 @@
   (:require [statistica.counters-db :refer [get-best-repositories]]
             [clj-time.core :as t]
             [clj-time.coerce :as c]
+            [clj-time.format :as f]
+            [clj-time.periodic :as p]
             [plumbing.core :as pc]
             [clojure.pprint :refer [print-table]]
             [cheshire.core :refer [generate-string]]
@@ -59,16 +61,13 @@
            (assoc res :max-size-of-incrs (max (count (:incrs repo-stat)) (:max-size-of-incrs res))))
    init-stat statistica)))   
 
-(defn generate-and-sort [statistica sort-key filter-fn]
+(defn generate-and-sort [sort-key filter-fn statistica]
   (let [globals (calculate-globals statistica)]
    (sort-by sort-key > (filter #(filter-fn globals %) statistica))))
 
 ;; JSON GENERATE
 
-(def keys-for-json #(select-keys % [:name :incrs :url :diffw :w :cplx :sum]))
 
-(defn generate-json-stat [statistica]
-  (generate-string (map keys-for-json statistica)))
 
 ;; #TODO move to test.core
 ;; TEST PRINT
@@ -117,11 +116,31 @@
 (defn best-increments [from to]
   (map stats (filter #(= (:counter_id %) 4) (make-statistics from to))))
 
+(def number-of-best-repositories 10)
+(def keys-for-json #(select-keys % [:name :incrs :url :diffw :w :cplx :sum]))
+
+(defn local-to-utc-date [date]
+  (t/date-time (t/year date) (t/month date) (t/day date)))
+
+(defn make-date-range [from to]
+  (let [from# (local-to-utc-date from)
+        to# (local-to-utc-date to)]
+  (rest (take (inc (t/in-days (t/interval from# to#))) 
+              (p/periodic-seq from (t/days 1))))))
+
+(defn formate-date [date]
+  (let [formatter (f/formatter "dd.MM.yy")]
+    (f/unparse formatter (local-to-utc-date date))))
+
 (defn classification 
   ([sort-key]
     (classification sort-key (t/minus (t/today) (t/days 8)) (t/today)))
   ([sort-key from] 
     (classification sort-key from (t/today)))
   ([sort-key from to]
-    (let [statistica (best-increments from to)]
-      (generate-and-sort statistica sort-key composite-filter))))
+    (->> (best-increments from to)
+         (generate-and-sort sort-key composite-filter)
+         (take number-of-best-repositories)
+         (map keys-for-json)
+         (#(generate-string {:dates (map formate-date (make-date-range from to))
+                             :data %})))))

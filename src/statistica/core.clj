@@ -4,6 +4,7 @@
             [ring.util.response :refer :all]
             [ring.adapter.jetty :as jetty]
             [clj-time.coerce :as c]
+            [clj-time.core :as t]
             [environ.core :refer [env]]
             [ring.middleware.defaults :refer [wrap-defaults site-defaults]]
             [compojure.route :as route]
@@ -25,11 +26,11 @@
 (defroutes statistica-api
   (GET "/" {{from :from to :to} :params} 
     (let [from# (parse-date from)
-          to# (parse-date to)]
+          to# (t/plus (parse-date to) (t/days 1))]
       (cond
-        (not (or from# to#)) (good-response (generate-json-stat (take 10 (classification :w))))
-        (and from# (not to#)) (good-response (generate-json-stat (take 10 (classification :w from#))))
-        (and from# to#) (good-response (generate-json-stat (take 10 (classification :w from# to#))))
+        (not (or from# to#)) (good-response (classification :w))
+        (and from# (not to#)) (good-response (classification :w from#))
+        (and from# to#) (good-response (classification :w from# to#))
         :else bad-request)))
   (GET "/test/:method" [method] 
     (cond
@@ -48,5 +49,5 @@
 (defn -main [& args] 
   (start-watcher)
   (jetty/run-jetty app {:port (if (:port env) 
-                               (Integer/parseInt (:port env))
+                               (:port env)
                                8123)}))
