@@ -13,7 +13,7 @@
     (float (apply + (map #(/ (* %1 count-of-day) %2) increments days)))))
 
 (pc/defnk increasing-increments [increments]
-  (reduce #(conj %1 (+ %2 (last %1))) [0] (rest increments)))
+  (reduce #(conj %1 (+ %2 (last %1))) [(first increments)] (rest increments)))
 
 (pc/defnk diff-increments [increments]
   (map #(- %1 %2) (rest increments) increments))
