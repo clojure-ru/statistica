@@ -1,28 +1,19 @@
 (ns statistica.generate 
   (:require [statistica.counters-db :refer [get-best-repositories]]
             [statistica.redis :refer [cache]]
-            [clj-time.core :as t]
-            [clj-time.coerce :as c]
-            [clj-time.format :as f]
-            [clj-time.periodic :as p]
-            [plumbing.core :as pc]
+            [statistica.banned :refer [get-banlist]]
+            [statistica.date-helpers :refer :all]
             [statistica.redis :as r]
-            [clojure.pprint :refer [print-table]]
-            [cheshire.core :refer [generate-string]]
             [statistica.calculation :refer [stats]]
-            [statistica.banned :refer [get-banlist]]))
-
-;; HELPERS
-
-(def minute 60000)
-
-(defn from-sql-to-utc [date]
-  (c/from-long (- (.getTime date) (* (.getTimezoneOffset date) minute))))
-
-(defn prepare-jdbc-array-dates [dates]
-  (map from-sql-to-utc (seq (.getArray dates))))
+            [clj-time.core :as t]
+            [plumbing.core :as pc]
+            [cheshire.core :refer [generate-string]]))
 
 (def limit-for-weekly-select 1000)
+
+(def number-of-best-repositories 10)
+
+(def keys-for-json #(select-keys % [:name :incrs :url :diffw :w :cplx :sum]))
 
 ;; FILTER-FNS
 
@@ -67,43 +58,6 @@
   (let [globals (calculate-globals statistica)]
    (sort-by sort-key > (filter #(filter-fn globals %) statistica))))
 
-;; #TODO move to test.core
-;; TEST PRINT
-
-(def keys-for-print #(select-keys % [:sum :incrs :moda :w3 :w2 :w :name]))
-
-(defn print-fmt  [xs]
-  (map (pc/fnk [name w sum moda incrs]
-         (prn (str name " " sum "  " (seq incrs) " " (seq moda) " " w)))
-       xs))
-
-(defn print-tbl [statistica]
- (print-table (map keys-for-print statistica)))
-
-(defn sort-and-print-frequencies [xs]
-  (prn "------------------")
-  (prn (str "min-val " (key xs)))
-  (doall
-   (map #(do
-           (prn (str " -------- frequency for min-val " (key %) " ------------ " ))
-           (doall (print-fmt (take 10 (sort-by :sum > (val %)))))) (val xs))))
-
-(defn sort-and-print-probs [xs]
-  (prn " ------ MAX expected value ------ ")
-  (doall (map print-fmt (take 10 (sort-by :m > xs))))
-  (prn " ------ MAX dispersion ------ ")
-  (doall (map print-fmt  (take 10 (sort-by :m2 < xs))))
-  (prn " ------ MAX MOM ------ ")
-  (doall (map print-fmt (take 10 (sort-by :m3 > xs)))))
-
-(defn moda-filter [freq-moda xs]
-  (filter #(= (-> % :moda second) freq-moda) xs))
-
-(defn sort-by-moda [xs x]
-  (prn " -------- MODA ---------- ")
-  ;;(print-fmt )
-  (print-table (map keys-for-print (take 100 (sort-by #(-> % :sum) > (moda-filter x xs))))))
-
 ;; CALCULUS
 
 (defn gigants [statics]
@@ -114,22 +68,6 @@
 (defn best-increments [from to]
   (map stats (filter #(= (:counter_id %) 4) (make-statistics from to))))
 
-(def number-of-best-repositories 10)
-(def keys-for-json #(select-keys % [:name :incrs :url :diffw :w :cplx :sum]))
-
-(defn local-to-utc-date [date]
-  (t/date-time (t/year date) (t/month date) (t/day date)))
-
-(defn make-date-range [from to]
-  (let [from# (local-to-utc-date from)
-        to# (local-to-utc-date to)]
-  (rest (take (inc (t/in-days (t/interval from# to#))) 
-              (p/periodic-seq from (t/days 1))))))
-
-(defn formate-date [date]
-  (let [formatter (f/formatter "dd.MM.yy")]
-    (f/unparse formatter (local-to-utc-date date))))
-
 (defn make-classification [sort-key from to]
   (->> (best-increments from to)
        (generate-and-sort sort-key composite-filter)
@@ -138,10 +76,6 @@
        (#(generate-string {:dates (map formate-date (make-date-range from to))
                            :data %}))))
 
-(defn make-key [from to]
-  (let [formatter (f/formatter "dd.MM.yyyy")]
-    (apply str (map #(f/unparse formatter (c/to-date-time %)) [from to]))))
-  
 (defn get-classification 
   ([sort-key]
     (get-classification sort-key (t/minus (t/today) (t/days 8)) (t/today)))
