@@ -1,10 +1,12 @@
 (ns statistica.generate 
   (:require [statistica.counters-db :refer [get-best-repositories]]
+            [statistica.redis :refer [cache]]
             [clj-time.core :as t]
             [clj-time.coerce :as c]
             [clj-time.format :as f]
             [clj-time.periodic :as p]
             [plumbing.core :as pc]
+            [statistica.redis :as r]
             [clojure.pprint :refer [print-table]]
             [cheshire.core :refer [generate-string]]
             [statistica.calculation :refer [stats]]
@@ -64,10 +66,6 @@
 (defn generate-and-sort [sort-key filter-fn statistica]
   (let [globals (calculate-globals statistica)]
    (sort-by sort-key > (filter #(filter-fn globals %) statistica))))
-
-;; JSON GENERATE
-
-
 
 ;; #TODO move to test.core
 ;; TEST PRINT
@@ -132,15 +130,24 @@
   (let [formatter (f/formatter "dd.MM.yy")]
     (f/unparse formatter (local-to-utc-date date))))
 
-(defn classification 
+(defn make-classification [sort-key from to]
+  (->> (best-increments from to)
+       (generate-and-sort sort-key composite-filter)
+       (take number-of-best-repositories)
+       (map keys-for-json)
+       (#(generate-string {:dates (map formate-date (make-date-range from to))
+                           :data %}))))
+
+(defn make-key [from to]
+  (let [formatter (f/formatter "dd.MM.yyyy")]
+    (apply str (map #(f/unparse formatter (c/to-date-time %)) [from to]))))
+  
+(defn get-classification 
   ([sort-key]
-    (classification sort-key (t/minus (t/today) (t/days 8)) (t/today)))
+    (get-classification sort-key (t/minus (t/today) (t/days 8)) (t/today)))
   ([sort-key from] 
-    (classification sort-key from (t/today)))
+    (get-classification sort-key from (t/today)))
   ([sort-key from to]
-    (->> (best-increments from to)
-         (generate-and-sort sort-key composite-filter)
-         (take number-of-best-repositories)
-         (map keys-for-json)
-         (#(generate-string {:dates (map formate-date (make-date-range from to))
-                             :data %})))))
+    (let [key (make-key from to)]
+     (or (r/get key)
+         (r/set key (make-classification sort-key from to))))))

@@ -8,6 +8,7 @@
                  [ring/ring-jetty-adapter "1.3.1"]
                  [compojure "1.3.1"]
                  [environ "1.0.0"]
+                 [com.taoensso/carmine "2.9.0"]
                  [postgresql "9.3-1102.jdbc41"]
                  [prismatic/plumbing "0.2.1"]
                  [clj-time "0.8.0"]
@@ -19,5 +20,9 @@
          :port 8123}
 
   :main statistica.core
-  :env {:port 8123}
+
+  :env {:port 8123
+        :redis-port 6379}
+
+  :injection [(ns user)]
 )

@@ -1,13 +1,10 @@
 (ns statistica.banned
-  ;;(comment
   (:require [watchtower.core :refer [watcher 
                                      rate
                                      file-filter
                                      on-change
                                      ignore-dotfiles
-                                     extensions]])
-  ;)
-) 
+                                     extensions]]))
 
 (def banlist-path "resources/ban_list.clj")
 

@@ -26,11 +26,11 @@
 (defroutes statistica-api
   (GET "/" {{from :from to :to} :params} 
     (let [from# (parse-date from)
-          to# (t/plus (parse-date to) (t/days 1))]
+          to# (parse-date to)] 
       (cond
-        (not (or from# to#)) (good-response (classification :w))
-        (and from# (not to#)) (good-response (classification :w from#))
-        (and from# to#) (good-response (classification :w from# to#))
+        (not (or from# to#)) (good-response (get-classification :w))
+        (and from# (not to#)) (good-response (get-classification :w from#))
+        (and from# to#) (good-response (get-classification :w from# (t/plus to# (t/days 1))))
         :else bad-request)))
   (GET "/test/:method" [method] 
     (cond
@@ -46,8 +46,13 @@
 
 (def app (wrap-defaults statistica-api site-defaults))
 
+(def default-port 8123)
+
+(defn get-port []
+   (if-let [p (:port env)]
+     (if (string? p) (Integer/parseInt p) p)
+     default-port))
+
 (defn -main [& args] 
   (start-watcher)
-  (jetty/run-jetty app {:port (if (:port env) 
-                               (:port env)
-                               8123)}))
+  (jetty/run-jetty app {:port (get-port)}))
